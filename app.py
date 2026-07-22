@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Načtení přihlašovacích údajů z Environment Variables na Renderu
+# Načtení přihlašovacích údajů z Environment Variables v Renderu
 EMAIL = os.environ.get("MATCHTRADER_EMAIL")
 ACCOUNT_ID = os.environ.get("MATCHTRADER_ACCOUNT")
 PASSWORD = os.environ.get("MATCHTRADER_PASSWORD")
@@ -51,7 +51,7 @@ def open_matchtrader_position(action, symbol, price):
         "Content-Type": "application/json"
     }
 
-    cmd = "BUY" if action == "BUY" else "SELL"
+    cmd = "BUY" if "BUY" in action else "SELL"
     volume = 0.10  # Objem pro $5K účet
 
     payload = {
@@ -98,7 +98,7 @@ def test_connection():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    """Přijímá signály z TradingView"""
+    """Přijímá signály z TradingView strategie"""
     try:
         raw_data = request.get_data(as_text=True)
         try:
@@ -106,15 +106,16 @@ def webhook():
         except Exception:
             data = request.form.to_dict() if request.form else {}
 
-        raw_symbol = data.get("symbol", "")
+        # Načte ticker neboli symbol (podporuje "ticker" i "symbol")
+        raw_symbol = data.get("ticker", data.get("symbol", ""))
         action = str(data.get("action", "")).upper()
         price = data.get("price", 0)
 
         trade_symbol = SYMBOL_MAP.get(raw_symbol, raw_symbol)
 
-        print(f"📥 PŘIJAT SIGNÁL Z TRADINGVIEW: {action} {trade_symbol} @ {price}")
+        print(f"📥 PŘIJAT SIGNÁL ZE STRATEGIE: {action} {trade_symbol} @ {price}")
 
-        if action in ["BUY", "SELL"]:
+        if "BUY" in action or "SELL" in action:
             open_matchtrader_position(action, trade_symbol, price)
 
         return jsonify({
