@@ -1,10 +1,10 @@
 import os
+import json
 import requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Převodní slovník symbolů pro Funding Pips / TradeLocker
 SYMBOL_MAP = {
     "TVC:NDQ": "NAS100",
     "NDQ": "NAS100",
@@ -14,15 +14,17 @@ SYMBOL_MAP = {
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        data = request.json
-        if not data:
-            return jsonify({"status": "error", "message": "No JSON payload"}), 400
+        raw_data = request.get_data(as_text=True)
+        
+        try:
+            data = json.loads(raw_data)
+        except Exception:
+            data = request.form.to_dict() if request.form else {}
 
         raw_symbol = data.get("symbol", "")
         action = str(data.get("action", "")).upper()
-        price = float(data.get("price", 0))
+        price = data.get("price", 0)
 
-        # Převod symbolu
         trade_symbol = SYMBOL_MAP.get(raw_symbol, raw_symbol)
 
         print(f"📥 PŘIJAT SIGNÁL: {action} {trade_symbol} @ {price}")
