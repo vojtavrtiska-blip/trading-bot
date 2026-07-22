@@ -5,13 +5,16 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+# Načtení přihlašovacích údajů z Environmentu na Renderu
 EMAIL = os.environ.get("MATCHTRADER_EMAIL")
 ACCOUNT_ID = os.environ.get("MATCHTRADER_ACCOUNT")
 PASSWORD = os.environ.get("MATCHTRADER_PASSWORD")
 SERVER = os.environ.get("MATCHTRADER_SERVER", "FundingPips")
 
+# API endpoint MatchTraderu u Funding Pips
 BASE_URL = "https://gtrader.fundingpips.com/api"
 
+# Převodník symbolů z TradingView
 SYMBOL_MAP = {
     "TVC:NDQ": "NAS100",
     "NDQ": "NAS100",
@@ -19,6 +22,7 @@ SYMBOL_MAP = {
 }
 
 def get_auth_token():
+    """Přihlásí se do MatchTrader API a získá prístupový token"""
     try:
         url = f"{BASE_URL}/auth/login"
         payload = {
@@ -28,22 +32,62 @@ def get_auth_token():
         }
         res = requests.post(url, json=payload, timeout=10)
         if res.status_code == 200:
-            return res.json().get("token"), res.json()
+            data = res.json()
+            return data.get("token"), data
         else:
             return None, f"Chyba {res.status_code}: {res.text}"
     except Exception as e:
         return None, str(e)
 
+def open_matchtrader_position(action, symbol, price):
+    """Otevírá pozici v MatchTraderu"""
+    token, _ = get_auth_token()
+    if not token:
+        print("❌ Nelze otevřít obchod - chyba přihlášení.")
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    cmd = "BUY" if action == "BUY" else "SELL"
+    volume = 0.10  # Objem pro $5K účet
+
+    payload = {
+        "account": ACCOUNT_ID,
+        "symbol": symbol,
+        "cmd": cmd,
+        "volume": volume
+    }
+
+    try:
+        url = f"{BASE_URL}/trade/open"
+        res = requests.post(url, json=payload, headers=headers, timeout=10)
+        if res.status_code in [200, 201]:
+            print(f"✅ OBCHOD ÚSPĚŠNĚ OTEVŘEN: {cmd} {symbol} (Volume: {volume})")
+            return True
+        else:
+            print(f"❌ MatchTrader zamítl příkaz: {res.status_code} - {res.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Výjimka při otevírání obchodu: {e}")
+        return False
+
+@app.route('/', methods=['GET'])
+def home():
+    return "Bot je aktivní a běží na Renderu!", 200
+
 @app.route('/test', methods=['GET'])
 def test_connection():
-    """Testovací adresa pro overeni spojeni s MatchTrader uctem"""
+    """Testovací adresa pro ověření přihlášení k MatchTraderu"""
     token, debug_info = get_auth_token()
     if token:
         return jsonify({
             "status": "SUCCESS ✅",
             "message": f"Uspesne pripojeno k uctu {ACCOUNT_ID} u Funding Pips!",
             "account_email": EMAIL,
-            "raw_response": debug_info
+            "info": debug_info
         }), 200
     else:
         return jsonify({
@@ -54,6 +98,7 @@ def test_connection():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    """Přijímá signály z TradingView"""
     try:
         raw_data = request.get_data(as_text=True)
         try:
@@ -68,6 +113,9 @@ def webhook():
         trade_symbol = SYMBOL_MAP.get(raw_symbol, raw_symbol)
 
         print(f"📥 PŘIJAT SIGNÁL Z TRADINGVIEW: {action} {trade_symbol} @ {price}")
+
+        if action in ["BUY", "SELL"]:
+            open_matchtrader_position(action, trade_symbol, price)
 
         return jsonify({
             "status": "success",
