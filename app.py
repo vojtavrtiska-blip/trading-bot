@@ -12,7 +12,7 @@ PASSWORD = os.environ.get("MATCHTRADER_PASSWORD")
 SERVER = os.environ.get("MATCHTRADER_SERVER", "FundingPips")
 
 # API endpoint MatchTraderu u Funding Pips
-BASE_URL = "https://gtrader.fundingpips.com/api"
+BASE_URL = "https://matchtrader.fundingpips.com/api"
 
 # Převodník symbolů z TradingView na broker formát
 SYMBOL_MAP = {
