@@ -11,7 +11,7 @@ ACCOUNT_ID = os.environ.get("MATCHTRADER_ACCOUNT")
 PASSWORD = os.environ.get("MATCHTRADER_PASSWORD")
 SERVER = os.environ.get("MATCHTRADER_SERVER", "FundingPips")
 
-# API endpoint MatchTraderu u Funding Pips
+# Správný API endpoint zjištěný přímo z platformy MatchTraderu
 BASE_URL = "https://mtr-platform.fundingpips.com/api"
 
 # Převodník symbolů z TradingView na broker formát
@@ -31,7 +31,13 @@ def get_auth_token():
             "server": SERVER
         }
         res = requests.post(url, json=payload, timeout=10)
-        if res.status_code == 200:
+        
+        # Zkratka pro případ, že API očekává login bez /api předpony
+        if res.status_code == 404:
+            alt_url = "https://mtr-platform.fundingpips.com/auth/login"
+            res = requests.post(alt_url, json=payload, timeout=10)
+
+        if res.status_code in [200, 201]:
             data = res.json()
             return data.get("token"), data
         else:
@@ -52,7 +58,7 @@ def open_matchtrader_position(action, symbol, price):
     }
 
     cmd = "BUY" if "BUY" in action else "SELL"
-    volume = 0.10  # Objem pro $5K účet
+    volume = 0.10  # Objem pro testovací $5K účet
 
     payload = {
         "account": ACCOUNT_ID,
@@ -106,7 +112,6 @@ def webhook():
         except Exception:
             data = request.form.to_dict() if request.form else {}
 
-        # Načte ticker neboli symbol (podporuje "ticker" i "symbol")
         raw_symbol = data.get("ticker", data.get("symbol", ""))
         action = str(data.get("action", "")).upper()
         price = data.get("price", 0)
