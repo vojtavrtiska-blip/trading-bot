@@ -11,7 +11,7 @@ ACCOUNT_ID = os.environ.get("MATCHTRADER_ACCOUNT")
 PASSWORD = os.environ.get("MATCHTRADER_PASSWORD")
 SERVER = os.environ.get("MATCHTRADER_SERVER", "FundingPips")
 
-# Správný API endpoint zjištěný přímo z platformy MatchTraderu
+# API endpoint MatchTraderu u Funding Pips
 BASE_URL = "https://mtr-platform.fundingpips.com/api"
 
 # Převodník symbolů z TradingView na broker formát
@@ -20,6 +20,16 @@ SYMBOL_MAP = {
     "NDQ": "NAS100",
     "US100": "NAS100"
 }
+
+def get_common_headers():
+    """Vrací hlavičky imitující běžný prohlížeč pro obcházení Cloudflare WAF (403)"""
+    return {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json",
+        "Origin": "https://mtr-platform.fundingpips.com",
+        "Referer": "https://mtr-platform.fundingpips.com/"
+    }
 
 def get_auth_token():
     """Přihlásí se do MatchTrader API a získá přístupový token"""
@@ -30,12 +40,9 @@ def get_auth_token():
             "password": PASSWORD,
             "server": SERVER
         }
-        res = requests.post(url, json=payload, timeout=10)
         
-        # Zkratka pro případ, že API očekává login bez /api předpony
-        if res.status_code == 404:
-            alt_url = "https://mtr-platform.fundingpips.com/auth/login"
-            res = requests.post(alt_url, json=payload, timeout=10)
+        headers = get_common_headers()
+        res = requests.post(url, json=payload, headers=headers, timeout=10)
 
         if res.status_code in [200, 201]:
             data = res.json()
@@ -52,10 +59,8 @@ def open_matchtrader_position(action, symbol, price):
         print(f"❌ Nelze otevřít obchod - chyba přihlášení: {debug_info}")
         return False
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+    headers = get_common_headers()
+    headers["Authorization"] = f"Bearer {token}"
 
     cmd = "BUY" if "BUY" in action else "SELL"
     volume = 0.10  # Objem pro testovací $5K účet
