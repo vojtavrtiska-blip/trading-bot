@@ -1,6 +1,6 @@
 import os
 import json
-import requests
+import cloudscraper
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -21,18 +21,18 @@ SYMBOL_MAP = {
     "US100": "NAS100"
 }
 
-def get_common_headers():
-    """Vrací hlavičky imitující běžný prohlížeč pro obcházení Cloudflare WAF (403)"""
-    return {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json",
-        "Origin": "https://mtr-platform.fundingpips.com",
-        "Referer": "https://mtr-platform.fundingpips.com/"
-    }
+def get_scraper():
+    """Vytvoří cloudscraper instanci obcházející Cloudflare TLS ochranu"""
+    return cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
 
 def get_auth_token():
-    """Přihlásí se do MatchTrader API a získá přístupový token"""
+    """Přihlásí se do MatchTrader API přes cloudscraper"""
     try:
         url = f"{BASE_URL}/auth/login"
         payload = {
@@ -41,8 +41,8 @@ def get_auth_token():
             "server": SERVER
         }
         
-        headers = get_common_headers()
-        res = requests.post(url, json=payload, headers=headers, timeout=10)
+        scraper = get_scraper()
+        res = scraper.post(url, json=payload, timeout=15)
 
         if res.status_code in [200, 201]:
             data = res.json()
@@ -59,8 +59,11 @@ def open_matchtrader_position(action, symbol, price):
         print(f"❌ Nelze otevřít obchod - chyba přihlášení: {debug_info}")
         return False
 
-    headers = get_common_headers()
-    headers["Authorization"] = f"Bearer {token}"
+    scraper = get_scraper()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
 
     cmd = "BUY" if "BUY" in action else "SELL"
     volume = 0.10  # Objem pro testovací $5K účet
@@ -74,7 +77,7 @@ def open_matchtrader_position(action, symbol, price):
 
     try:
         url = f"{BASE_URL}/trade/open"
-        res = requests.post(url, json=payload, headers=headers, timeout=10)
+        res = scraper.post(url, json=payload, headers=headers, timeout=15)
         if res.status_code in [200, 201]:
             print(f"✅ OBCHOD ÚSPĚŠNĚ OTEVŘEN: {cmd} {symbol} (Volume: {volume})")
             return True
